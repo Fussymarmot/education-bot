@@ -1,0 +1,7 @@
+aiogram>=3.31
+SQLAlchemy>=2.0
+aiosqlite
+beautifulsoup4
+python-dotenv
+tzdata
+pytest

@@ -1,0 +1,119 @@
+"""Configuration loaded from environment variables and .env file."""
+from __future__ import annotations
+
+import logging
+import os
+from dataclasses import dataclass
+from datetime import timedelta, timezone, tzinfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+log = logging.getLogger(__name__)
+
+
+def _env_float(name: str, default: float, minimum: float) -> float:
+    """Parse float from environment with minimum value constraint."""
+    try:
+        return max(minimum, float(os.getenv(name, default)))
+    except ValueError:
+        return default
+
+
+def _parse_ids(raw: str) -> frozenset[int]:
+    """Parse comma or semicolon separated admin IDs."""
+    ids: set[int] = set()
+    for part in raw.replace(";", ",").replace(" ", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            ids.add(int(part))
+        except ValueError:
+            raise RuntimeError(f"ADMIN_IDS: '{part}' is not a number") from None
+    return frozenset(ids)
+
+
+def _parse_chat_id(raw: str) -> int | None:
+    """Parse group chat ID (can be None if empty)."""
+    raw = raw.strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        raise RuntimeError(f"GROUP_CHAT_ID: '{raw}' is not a number (expected format: -1001234567890)") from None
+
+
+def _load_tz(name: str) -> tzinfo:
+    """Load timezone or fallback to UTC."""
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        if name == "Europe/Moscow":
+            log.warning("Europe/Moscow not found (Windows: run 'pip install tzdata') - using UTC+3")
+            return timezone(timedelta(hours=3))
+        log.warning("Unknown timezone '%s' (Windows: run 'pip install tzdata') - using UTC", name)
+        return timezone.utc
+
+
+@dataclass(frozen=True)
+class Config:
+    bot_token: str
+    admin_ids: frozenset[int]
+    group_chat_id: int | None
+    database_url: str
+    tz: tzinfo
+    shapt_cache_ttl: float
+    shapt_poll_interval: float
+    notifications_enabled: bool
+    icons: dict[str, str]
+
+    @property
+    def tz_name(self) -> str:
+        return getattr(self.tz, "key", None) or "UTC"
+
+    def is_admin(self, user_id: int | None) -> bool:
+        return user_id is not None and user_id in self.admin_ids
+
+    def is_group(self, chat_id: int | None) -> bool:
+        return self.group_chat_id is not None and chat_id == self.group_chat_id
+
+
+def load_config() -> Config:
+    """Load configuration from environment."""
+    poll_raw = os.getenv("SHAPT_POLL_INTERVAL", "600").strip()
+    tz_name = os.getenv("TIMEZONE") or os.getenv("SCHEDULE_TZ") or "Europe/Moscow"
+    return Config(
+        bot_token=os.getenv("BOT_TOKEN", "").strip(),
+        admin_ids=_parse_ids(os.getenv("ADMIN_IDS", "")),
+        group_chat_id=_parse_chat_id(os.getenv("GROUP_CHAT_ID", "")),
+        database_url=os.getenv("DATABASE_URL", "sqlite+aiosqlite:///bot.db").strip(),
+        tz=_load_tz(tz_name),
+        shapt_cache_ttl=_env_float("SHAPT_CACHE_TTL", 300, 30),
+        shapt_poll_interval=_env_float("SHAPT_POLL_INTERVAL", 600, 60),
+        notifications_enabled=poll_raw != "0",
+        icons={
+            "bells": os.getenv("ICON_BELLS", "5242628160297641831").strip(),
+            "lessons": os.getenv("ICON_LESSONS", "5373098009640836781").strip(),
+            "settings": os.getenv("ICON_SETTINGS", "5818705028424141605").strip(),
+            "replacements": os.getenv("ICON_REPLACEMENTS", "5264727218734524899").strip(),
+            "edit": os.getenv("ICON_EDIT", "5334673106202010226").strip(),
+            "cancel": os.getenv("ICON_CANCEL", "5834629976883732083").strip(),
+            "disable": os.getenv("ICON_DISABLE", "5244807637157029775").strip(),
+            "panel": os.getenv("ICON_PANEL", "5449428597922079323").strip(),
+            "calendar": os.getenv("ICON_CALENDAR", "5431897022456145283").strip(),
+            "time": os.getenv("ICON_TIME", "5451732530048802485").strip(),
+            "warning": os.getenv("ICON_WARNING", "5213181173026533794").strip(),
+            "added": os.getenv("ICON_ADDED", "").strip(),
+            "removed": os.getenv("ICON_REMOVED", "").strip(),
+            "changed": os.getenv("ICON_CHANGED", "5334673106202010226").strip(),
+        },
+    )
+
+
+config = load_config()
