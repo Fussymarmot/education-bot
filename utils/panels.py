@@ -26,7 +26,7 @@ def with_notice(text: str, notice: str) -> str:
 def errors_text(errors: list[str]) -> str:
     """Format error list, show first 6 with ellipsis if more."""
     shown = "\n".join(escape(e) for e in errors[:6])
-    return shown + (f"\n...and {len(errors) - 6} more" if len(errors) > 6 else "")
+    return shown + (f"\n...и ещё {len(errors) - 6}" if len(errors) > 6 else "")
 
 
 def valid_slot(day: int, shift: int) -> bool:
@@ -35,8 +35,8 @@ def valid_slot(day: int, shift: int) -> bool:
 
 
 def scope_name(day: int) -> str:
-    """Get display name: 'regular days' or day of week."""
-    return "regular days" if day == DEFAULT_DAY else DAY_FULL[day]
+    """Display name of a bells scope: the common schedule or a weekday."""
+    return "обычные дни" if day == DEFAULT_DAY else DAY_FULL[day]
 
 
 async def current_bells_text(day: int, shift: int) -> str:
@@ -53,17 +53,17 @@ async def menu_view(notice: str = "") -> Panel:
     settings = await queries.load_settings()
     today = datetime.now(config.tz).date()
     parity = week_parity(today, settings.anchor_monday, settings.anchor_parity)
-    week = f"now {WEEK_LABEL[parity]}" if parity else "not set"
-    shift = f"{settings.lessons_shift} shift" if settings.lessons_shift else "hidden"
+    week = f"сейчас {WEEK_LABEL[parity]}" if parity else "не указана"
+    shift = f"{settings.lessons_shift} смена" if settings.lessons_shift else "не показывается"
     repl_group = await queries.get_replacements_group()
     text = (
-        f"<tg-emoji emoji-id='{config.icons['panel']}'>🧰</tg-emoji> <b>Schedule Editor</b>\n\n"
-        f"<tg-emoji emoji-id='{config.icons['bells']}'>🔔</tg-emoji> Bells (regular days): shift 1 — {len(common.get(1, {}))} periods, shift 2 — {len(common.get(2, {}))} periods"
-        + (f", overrides: {overrides}" if overrides else "") + "\n"
-        f"<tg-emoji emoji-id='{config.icons['lessons']}'>📚</tg-emoji> Lessons: {len({(x.day, x.number) for x in lessons})} periods/week\n"
-        f"<tg-emoji emoji-id='{config.icons['calendar']}'>📆</tg-emoji> Week parity: {week}\n"
-        f"<tg-emoji emoji-id='{config.icons['time']}'>⏳</tg-emoji> Lesson times: {shift}\n"
-        f"<tg-emoji emoji-id='{config.icons['replacements']}'>🔄</tg-emoji> Group replacements: {escape(repl_group) if repl_group else 'disabled'}"
+        f"<tg-emoji emoji-id='{config.icons['panel']}'>🧰</tg-emoji> <b>Редактор расписания</b>\n\n"
+        f"<tg-emoji emoji-id='{config.icons['bells']}'>🔔</tg-emoji> Звонки (обычные дни): смена 1 — {len(common.get(1, {}))} зв., смена 2 — {len(common.get(2, {}))} зв."
+        + (f", свои расписания: {overrides}" if overrides else "") + "\n"
+        f"<tg-emoji emoji-id='{config.icons['lessons']}'>📚</tg-emoji> Занятия: {len({(x.day, x.number) for x in lessons})} пар в неделю\n"
+        f"<tg-emoji emoji-id='{config.icons['calendar']}'>📆</tg-emoji> Неделя: {week}\n"
+        f"<tg-emoji emoji-id='{config.icons['time']}'>⏳</tg-emoji> Время пар: {shift}\n"
+        f"<tg-emoji emoji-id='{config.icons['replacements']}'>🔄</tg-emoji> Замены в группе: {escape(repl_group) if repl_group else 'выключены'}"
     )
     return with_notice(text, notice), kb.menu_kb()
 
@@ -72,9 +72,9 @@ async def bells_menu_view(notice: str = "") -> Panel:
     """Bells schedule menu."""
     bells = await queries.load_bells()
     text = (
-        f"<tg-emoji emoji-id='{config.icons['bells']}'>🔔</tg-emoji> <b>Bells Schedule</b>\n\n"
-        "\"Regular days\" apply everywhere unless a day has its own schedule. "
-        "Set custom times for days like Saturday. ✱ — day has custom schedule."
+        f"<tg-emoji emoji-id='{config.icons['bells']}'>🔔</tg-emoji> <b>Расписание звонков</b>\n\n"
+        "«Обычные дни» действуют везде, если у дня нет своего расписания. "
+        "Свои звонки можно задать, например, для субботы. ✱ — у дня есть своё расписание."
     )
     own = {d for d in range(7) if any(bells.get(d, {}).values())}
     return with_notice(text, notice), kb.bells_menu_kb(own)
@@ -83,9 +83,9 @@ async def bells_menu_view(notice: str = "") -> Panel:
 async def bscope_view(day: int, notice: str = "") -> Panel:
     """Bells scope (day) selection and shift choice."""
     bells = (await queries.load_bells()).get(day, {})
-    text = f"<tg-emoji emoji-id='{config.icons['bells']}'>🔔</tg-emoji> <b>Bells · {scope_name(day)}</b>\n\nSelect shift."
+    text = f"<tg-emoji emoji-id='{config.icons['bells']}'>🔔</tg-emoji> <b>Звонки · {scope_name(day)}</b>\n\nВыберите смену."
     if day != DEFAULT_DAY:
-        text += " Missing shift falls back to regular days."
+        text += " Если для смены ничего не задано, берутся звонки обычных дней."
     return with_notice(text, notice), kb.bscope_kb(day, len(bells.get(1, {})), len(bells.get(2, {})))
 
 
@@ -95,23 +95,23 @@ async def bells_shift_view(day: int, shift: int, notice: str = "") -> Panel:
     if bells:
         body = f"<pre>{escape(format_bells(bells))}</pre>"
     elif day == DEFAULT_DAY:
-        body = "Empty."
+        body = "Пусто."
     else:
-        body = "No custom schedule — uses regular days."
-    text = f"<tg-emoji emoji-id='{config.icons['bells']}'>🔔</tg-emoji> <b>Bells · {scope_name(day)} · shift {shift}</b>\n\n{body}"
+        body = "Своего расписания нет — используются звонки обычных дней."
+    text = f"<tg-emoji emoji-id='{config.icons['bells']}'>🔔</tg-emoji> <b>Звонки · {scope_name(day)} · смена {shift}</b>\n\n{body}"
     return with_notice(text, notice), kb.bshift_kb(day, shift, bool(bells))
 
 
 def bells_prompt(day: int, shift: int, current: str, notice: str = "") -> Panel:
     """Prompt for entering bells schedule. Old data will be replaced."""
     text = (
-        f"<tg-emoji emoji-id='{config.icons['edit']}'>✏️</tg-emoji> <b>Bells · {scope_name(day)} · shift {shift}</b>\n\n"
-        "Send one line per period: <code>number HH:MM-HH:MM</code>. "
-        "Optional note after time.\n\n"
-        "<pre>1 08:30-10:00\n2 10:10-11:40 20 min break</pre>"
+        f"<tg-emoji emoji-id='{config.icons['edit']}'>✏️</tg-emoji> <b>Звонки · {scope_name(day)} · смена {shift}</b>\n\n"
+        "Отправьте по строке на звонок: <code>номер ЧЧ:ММ-ЧЧ:ММ</code>. "
+        "После времени можно добавить заметку.\n\n"
+        "<pre>1 08:30-10:00\n2 10:10-11:40 перерыв 20 мин</pre>"
     )
     if current:
-        text += f"\n\nCurrent (copy and edit):\n<pre>{escape(current)}</pre>"
+        text += f"\n\nСейчас (можно скопировать и поправить):\n<pre>{escape(current)}</pre>"
     if notice:
         text = f"<tg-emoji emoji-id='{config.icons['warning']}'>⚠️</tg-emoji> {notice}\n\n{text}"
     return text, kb.bells_prompt_kb(day, shift)
@@ -119,8 +119,8 @@ def bells_prompt(day: int, shift: int, current: str, notice: str = "") -> Panel:
 
 def bells_clear_confirm_view(day: int, shift: int) -> Panel:
     """Confirm deletion of bells schedule."""
-    what = "Clear" if day == DEFAULT_DAY else "Remove custom schedule and revert to regular for"
-    return f"🗑 {what}: bells · {scope_name(day)} · shift {shift}?", kb.bclear_confirm_kb(day, shift)
+    what = "Очистить" if day == DEFAULT_DAY else "Убрать своё расписание и вернуть обычные звонки для"
+    return f"🗑 {what}: {scope_name(day)} · смена {shift}?", kb.bclear_confirm_kb(day, shift)
 
 
 async def days_view(notice: str = "") -> Panel:
