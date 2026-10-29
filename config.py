@@ -24,6 +24,14 @@ def _env_float(name: str, default: float, minimum: float) -> float:
         return default
 
 
+def _env_chance(name: str, default: float) -> float:
+    """Probability from environment, clamped to [0, 1]."""
+    try:
+        return min(1.0, max(0.0, float(os.getenv(name, default))))
+    except ValueError:
+        return default
+
+
 def _parse_ids(raw: str) -> frozenset[int]:
     """Parse comma or semicolon separated admin IDs."""
     ids: set[int] = set()
@@ -72,6 +80,8 @@ class Config:
     shapt_poll_interval: float
     notifications_enabled: bool
     icons: dict[str, str]
+    reactions_enabled: bool = True
+    reaction_chance: float = 0.05
 
     @property
     def tz_name(self) -> str:
@@ -113,6 +123,8 @@ def load_config() -> Config:
             "removed": os.getenv("ICON_REMOVED", "").strip(),
             "changed": os.getenv("ICON_CHANGED", "5334673106202010226").strip(),
         },
+        reactions_enabled=os.getenv("REACTIONS_ENABLED", "1").strip() != "0",
+        reaction_chance=_env_chance("REACTION_CHANCE", 0.05),
     )
 
 

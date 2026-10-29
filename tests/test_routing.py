@@ -192,3 +192,51 @@ def test_every_editor_button_is_handled(env):
                 if not env(_callback(ADMIN, ADMIN, button.callback_data, "private")):
                     unhandled.append((button.text, button.callback_data))
     assert not unhandled
+
+
+# --- интеграция: настоящий диспетчер + фейковая сессия Telegram -----------------
+from dataclasses import replace  # noqa: E402
+
+from config import config  # noqa: E402
+from utils.common import reactions as r  # noqa: E402
+
+
+def _no_random(monkeypatch, chance=0.0, enabled=True):
+    from handlers import reactions as handler
+    monkeypatch.setattr(handler, "config", replace(config, reaction_chance=chance, reactions_enabled=enabled))
+
+
+def test_keyword_in_group_sets_reaction(env, monkeypatch):
+    _no_random(monkeypatch)
+    assert env(_message(GROUP, USER, "всем привет!", "supergroup")) == ["setMessageReaction"]
+    data = env.session.calls[0][1]
+    assert data["chat_id"] == GROUP and data["message_id"] == 10
+    assert data["reaction"][0]["emoji"] in ("🤗", "🫡")
+
+
+def test_plain_message_without_chance_gets_nothing(env, monkeypatch):
+    _no_random(monkeypatch, chance=0.0)
+    assert env(_message(GROUP, USER, "какое-то обычное сообщение", "supergroup")) == []
+
+
+def test_plain_message_with_full_chance_gets_random_emoji(env, monkeypatch):
+    _no_random(monkeypatch, chance=1.0)
+    assert env(_message(GROUP, USER, "какое-то обычное сообщение", "supergroup")) == ["setMessageReaction"]
+    assert env.session.calls[0][1]["reaction"][0]["emoji"] in r.RANDOM_EMOJIS
+
+
+def test_commands_still_answer_and_are_not_reacted(env, monkeypatch):
+    _no_random(monkeypatch, chance=1.0)
+    names = env(_message(GROUP, USER, "/help", "supergroup"))
+    assert names == ["sendMessage"]
+
+
+def test_other_chats_get_no_reactions(env, monkeypatch):
+    _no_random(monkeypatch, chance=1.0)
+    assert env(_message(-999, USER, "спасибо", "supergroup")) == []
+    assert env(_message(USER, USER, "спасибо", "private")) == []
+
+
+def test_reactions_can_be_disabled(env, monkeypatch):
+    _no_random(monkeypatch, chance=1.0, enabled=False)
+    assert env(_message(GROUP, USER, "спасибо", "supergroup")) == []
