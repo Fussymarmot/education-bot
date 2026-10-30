@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 
 from aiogram import Bot, F, Router
 from aiogram.dispatcher.event.bases import SkipHandler
@@ -61,7 +62,8 @@ async def _respond(message: Message, bot_id: int, decision: Decision) -> None:
                 pass
         people = {n: uid for n, uid in participants(history).items() if uid != bot_id} if config.ai_mentions else {}
         raw = await client.complete(build_messages(
-            NAME, history, forced=decision.forced, creator_ids=config.admin_ids, people=people))
+            NAME, history, forced=decision.forced, creator_ids=config.admin_ids, people=people,
+            evening=(datetime.now(config.tz).hour >= 22 or datetime.now(config.tz).hour < 6)))
         reply = clean_reply(raw, NAME)
         if reply is None:
             log.debug("AI промолчал (reason=%s)", decision.reason)

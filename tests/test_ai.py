@@ -59,6 +59,16 @@ def test_followup_only_for_same_user():
     assert not g.decide(1, 99, "сам ты такой", direct=False).reply
 
 
+def test_system_prompt_switches_between_day_and_evening():
+    from utils.ai.persona import system_prompt
+    normal = system_prompt("TOR")
+    evening = system_prompt("TOR", evening=True)
+    assert "Наглый, весёлый" in normal
+    assert "ВЕЧЕРНИЙ ХАРАКТЕР" not in normal
+    assert "ВЕЧЕРНИЙ ХАРАКТЕР" in evening
+    assert "не переходи на реальные угрозы" in evening
+
+
 def test_name_pattern():
     p = name_pattern(("Бананыч",))
     assert p.search("эй, бананыч, ты тут?") and p.search("Бананыча позовите")
