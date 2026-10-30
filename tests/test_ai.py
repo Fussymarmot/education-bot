@@ -14,7 +14,7 @@ class Clock:
 
 
 def gate(**kw):
-    base = dict(random_chance=0.0, absence_chance=1.0, followup_chance=0.0, cooldown=25, max_per_hour=3)
+    base = dict(random_chance=0.0, followup_chance=0.0, cooldown=25, max_per_hour=3)
     base.update(kw)
     clock = Clock()
     return Gate(**base, clock=clock, rng=random.Random(1)), clock
@@ -31,10 +31,11 @@ def test_plain_message_ignored_without_luck():
     assert not g.decide(1, 10, "обычное сообщение про погоду", direct=False).reply
 
 
-def test_absence_triggers_reply():
-    g, _ = gate()
-    d = g.decide(1, 10, "завтра на пару не приду", direct=False)
-    assert d.reply and d.reason == "absence"
+def test_topic_does_not_change_random_reply_probability():
+    g, _ = gate(random_chance=1.0)
+    for text in ("завтра на пару не приду", "обсудим технологии", "что посмотреть вечером", "как дела"):
+        decision = g.decide(hash(text), 10, text, direct=False)
+        assert decision.reply and decision.reason == "random"
 
 
 def test_cooldown_and_hour_limit():

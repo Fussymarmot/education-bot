@@ -7,8 +7,6 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Callable
 
-from utils.common.reactions import ABSENCE_RE
-
 DIALOG_WINDOW = 120.0   # сек: после ответа человеку считаем, что диалог с ним ещё идёт
 MIN_LEN = 4             # совсем короткое («ок», «+») игнорируем, если не звали
 
@@ -21,11 +19,10 @@ class Decision:
 
 
 class Gate:
-    def __init__(self, *, random_chance: float, absence_chance: float, followup_chance: float,
+    def __init__(self, *, random_chance: float, followup_chance: float,
                  cooldown: float, max_per_hour: int,
                  clock: Callable[[], float] = time.monotonic, rng: random.Random | None = None) -> None:
         self.random_chance = random_chance
-        self.absence_chance = absence_chance
         self.followup_chance = followup_chance
         self.cooldown = cooldown
         self.max_per_hour = max_per_hour
@@ -51,8 +48,6 @@ class Gate:
             return Decision(False, reason="short")
         if now - self._last_any.get(chat_id, -1e9) < self.cooldown:
             return Decision(False, reason="cooldown")
-        if ABSENCE_RE.search(text) and self._rng.random() < self.absence_chance:
-            return Decision(True, forced=True, reason="absence")
         in_dialog = now - self._last_to_user.get((chat_id, user_id or 0), -1e9) < DIALOG_WINDOW
         if in_dialog and self._rng.random() < self.followup_chance:
             return Decision(True, reason="followup")

@@ -25,7 +25,6 @@ NAME = config.ai_names[0]
 _name_re = name_pattern(config.ai_names)
 _gate = Gate(
     random_chance=config.ai_random_chance,
-    absence_chance=config.ai_absence_chance,
     followup_chance=config.ai_followup_chance,
     cooldown=config.ai_cooldown,
     max_per_hour=config.ai_max_per_hour,

@@ -101,7 +101,6 @@ class Config:
     ai_model: str = "llama-3.3-70b-versatile"
     ai_names: tuple[str, ...] = ("Бананыч",)
     ai_random_chance: float = 0.04      # шанс влезть в случайное сообщение
-    ai_absence_chance: float = 0.8      # шанс ответить на «не приду / опоздаю / прогуляю»
     ai_followup_chance: float = 0.5     # шанс продолжить диалог с тем, кому только что ответил
     ai_cooldown: float = 25.0           # пауза между непрошеными ответами в чате, сек
     ai_max_per_hour: int = 40           # общий лимит ответов в час на чат
@@ -162,7 +161,6 @@ def load_config() -> Config:
         ai_model=os.getenv("AI_MODEL", "llama-3.3-70b-versatile").strip(),
         ai_names=_parse_names(os.getenv("AI_NAMES", "Бананыч")),
         ai_random_chance=_env_chance("AI_RANDOM_CHANCE", 0.04),
-        ai_absence_chance=_env_chance("AI_ABSENCE_CHANCE", 0.8),
         ai_followup_chance=_env_chance("AI_FOLLOWUP_CHANCE", 0.5),
         ai_cooldown=_env_float("AI_COOLDOWN", 25, 0),
         ai_max_per_hour=_env_int("AI_MAX_PER_HOUR", 40, 1),
