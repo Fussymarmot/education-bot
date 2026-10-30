@@ -1,5 +1,5 @@
 """SQLAlchemy ORM models for bot data storage."""
-from sqlalchemy import Integer, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Float, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -49,3 +49,17 @@ class ReplacementState(Base):
 
     key: Mapped[str] = mapped_column(String(32), primary_key=True)
     value: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class AiMessage(Base):
+    """Короткая память ИИ-собеседника: последние сообщения чата (role: user|assistant). Чистится автоматически."""
+    __tablename__ = "ai_messages"
+    __table_args__ = (Index("ix_ai_messages_chat_id_id", "chat_id", "id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    role: Mapped[str] = mapped_column(String(10), nullable=False)
+    author: Mapped[str] = mapped_column(String(64), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[float] = mapped_column(Float, nullable=False)

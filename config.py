@@ -32,6 +32,18 @@ def _env_chance(name: str, default: float) -> float:
         return default
 
 
+def _env_int(name: str, default: int, minimum: int) -> int:
+    try:
+        return max(minimum, int(os.getenv(name, default)))
+    except ValueError:
+        return default
+
+
+def _parse_names(raw: str) -> tuple[str, ...]:
+    names = tuple(n.strip() for n in raw.split(",") if n.strip())
+    return names or ("Бананыч",)
+
+
 def _parse_ids(raw: str) -> frozenset[int]:
     """Parse comma or semicolon separated admin IDs."""
     ids: set[int] = set()
@@ -82,6 +94,25 @@ class Config:
     icons: dict[str, str]
     reactions_enabled: bool = True
     reaction_chance: float = 0.05
+    # --- ИИ-собеседник ---
+    ai_on: bool = True
+    ai_api_key: str = ""
+    ai_base_url: str = "https://api.groq.com/openai/v1"
+    ai_model: str = "llama-3.3-70b-versatile"
+    ai_names: tuple[str, ...] = ("Бананыч",)
+    ai_random_chance: float = 0.04      # шанс влезть в случайное сообщение
+    ai_absence_chance: float = 0.8      # шанс ответить на «не приду / опоздаю / прогуляю»
+    ai_followup_chance: float = 0.5     # шанс продолжить диалог с тем, кому только что ответил
+    ai_cooldown: float = 25.0           # пауза между непрошеными ответами в чате, сек
+    ai_max_per_hour: int = 40           # общий лимит ответов в час на чат
+    ai_history_limit: int = 15          # сколько последних сообщений хранить и отдавать ИИ
+    ai_history_ttl_hours: float = 6.0   # старше этого - удаляется
+    ai_max_tokens: int = 200
+    ai_mentions: bool = True            # может ли бот упоминать людей из недавнего лога
+
+    @property
+    def ai_enabled(self) -> bool:
+        return self.ai_on and bool(self.ai_api_key)
 
     @property
     def tz_name(self) -> str:
@@ -125,6 +156,20 @@ def load_config() -> Config:
         },
         reactions_enabled=os.getenv("REACTIONS_ENABLED", "1").strip() != "0",
         reaction_chance=_env_chance("REACTION_CHANCE", 0.05),
+        ai_on=os.getenv("AI_ENABLED", "1").strip() != "0",
+        ai_api_key=os.getenv("AI_API_KEY", "").strip(),
+        ai_base_url=os.getenv("AI_BASE_URL", "https://api.groq.com/openai/v1").strip().rstrip("/"),
+        ai_model=os.getenv("AI_MODEL", "llama-3.3-70b-versatile").strip(),
+        ai_names=_parse_names(os.getenv("AI_NAMES", "Бананыч")),
+        ai_random_chance=_env_chance("AI_RANDOM_CHANCE", 0.04),
+        ai_absence_chance=_env_chance("AI_ABSENCE_CHANCE", 0.8),
+        ai_followup_chance=_env_chance("AI_FOLLOWUP_CHANCE", 0.5),
+        ai_cooldown=_env_float("AI_COOLDOWN", 25, 0),
+        ai_max_per_hour=_env_int("AI_MAX_PER_HOUR", 40, 1),
+        ai_history_limit=_env_int("AI_HISTORY_LIMIT", 15, 2),
+        ai_history_ttl_hours=_env_float("AI_HISTORY_TTL_HOURS", 6, 0.1),
+        ai_max_tokens=_env_int("AI_MAX_TOKENS", 200, 32),
+        ai_mentions=os.getenv("AI_MENTIONS", "1").strip() != "0",
     )
 
 

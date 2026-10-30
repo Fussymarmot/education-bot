@@ -8,6 +8,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from config import config
 from database import close_db, init_db
 from handlers import setup_routers
+from utils.ai.client import close as close_ai
 from utils.common.commands import setup_commands
 from utils.replacements.replacements_service import poller
 
@@ -22,6 +23,8 @@ async def main() -> None:
         log.warning("ADMIN_IDS is empty: schedule editor will be unavailable")
     if config.group_chat_id is None:
         log.warning("GROUP_CHAT_ID not set: bot will only work in admin DMs")
+    if not config.ai_enabled:
+        log.info("AI chat is off (AI_API_KEY not set or AI_ENABLED=0)")
 
     await init_db()
     bot = Bot(config.bot_token)
@@ -42,6 +45,7 @@ async def main() -> None:
         if poll_task is not None:
             poll_task.cancel()
             await asyncio.gather(poll_task, return_exceptions=True)
+        await close_ai()
         await bot.session.close()
         await close_db()
 
