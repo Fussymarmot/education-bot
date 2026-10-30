@@ -84,13 +84,25 @@ def build_messages(name: str, history: list[Line], *, forced: bool,
 
 
 _THINK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+_SPECIAL = re.compile(r"<\|.*?\|>")          # служебные токены чат-шаблонов: <|end|>, <|start|>, <|channel|>...
+
+
+def strip_special_tokens(text: str) -> str:
+    """Убирает утечку служебных токенов (gpt-oss/harmony и т.п.): берём только финальное сообщение до первого лишнего токена."""
+    if "<|message|>" in text:                    # ...<|channel|>final<|message|>ТЕКСТ<|end|>...
+        text = text.rsplit("<|message|>", 1)[1]
+    cut = _SPECIAL.search(text)
+    if cut:
+        text = text[:cut.start()]
+    text = re.sub(r"^\s*(?:analysis|assistantfinal|final)\b[:\s]*", "", text, flags=re.IGNORECASE)
+    return text
 
 
 def clean_reply(raw: str | None, name: str, *, max_len: int = 500) -> str | None:
     """Чистим ответ модели. None = промолчать (пусто или SKIP)."""
     if not raw:
         return None
-    text = _THINK.sub("", raw).strip().strip("\"«»").strip()
+    text = strip_special_tokens(_THINK.sub("", raw)).strip().strip("\"«»").strip()
     text = re.sub(rf"^{re.escape(name)}\s*:\s*", "", text, flags=re.IGNORECASE)
     if not text or re.fullmatch(r"\W*skip\W*", text, flags=re.IGNORECASE):
         return None

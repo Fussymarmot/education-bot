@@ -39,6 +39,9 @@ def _env_int(name: str, default: int, minimum: int) -> int:
         return default
 
 
+CF_DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+
+
 def _parse_names(raw: str) -> tuple[str, ...]:
     names = tuple(n.strip() for n in raw.split(",") if n.strip())
     return names or ("Бананыч",)
@@ -99,6 +102,8 @@ class Config:
     ai_api_key: str = ""
     ai_base_url: str = "https://api.groq.com/openai/v1"
     ai_model: str = "llama-3.3-70b-versatile"
+    ai_cf_account_id: str = ""          # Cloudflare Workers AI: Account ID (если задан, base_url не нужен)
+    ai_temperature: float = 0.8
     ai_names: tuple[str, ...] = ("Бананыч",)
     ai_random_chance: float = 0.04      # шанс влезть в случайное сообщение
     ai_followup_chance: float = 0.5     # шанс продолжить диалог с тем, кому только что ответил
@@ -128,6 +133,8 @@ def load_config() -> Config:
     """Load configuration from environment."""
     poll_raw = os.getenv("SHAPT_POLL_INTERVAL", "600").strip()
     tz_name = os.getenv("TIMEZONE") or os.getenv("SCHEDULE_TZ") or "Europe/Moscow"
+    cf_account = os.getenv("AI_CF_ACCOUNT_ID", "").strip()
+    default_model = CF_DEFAULT_MODEL if cf_account else "llama-3.3-70b-versatile"
     return Config(
         bot_token=os.getenv("BOT_TOKEN", "").strip(),
         admin_ids=_parse_ids(os.getenv("ADMIN_IDS", "")),
@@ -158,7 +165,9 @@ def load_config() -> Config:
         ai_on=os.getenv("AI_ENABLED", "1").strip() != "0",
         ai_api_key=os.getenv("AI_API_KEY", "").strip(),
         ai_base_url=os.getenv("AI_BASE_URL", "https://api.groq.com/openai/v1").strip().rstrip("/"),
-        ai_model=os.getenv("AI_MODEL", "llama-3.3-70b-versatile").strip(),
+        ai_model=(os.getenv("AI_MODEL", "").strip() or default_model),
+        ai_cf_account_id=cf_account,
+        ai_temperature=_env_float("AI_TEMPERATURE", 0.8, 0),
         ai_names=_parse_names(os.getenv("AI_NAMES", "Бананыч")),
         ai_random_chance=_env_chance("AI_RANDOM_CHANCE", 0.04),
         ai_followup_chance=_env_chance("AI_FOLLOWUP_CHANCE", 0.5),

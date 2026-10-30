@@ -111,3 +111,22 @@ def test_creator_marked_in_log_by_id():
                           forced=True, creator_ids=frozenset({111}), people={"Админ": 111, "Вася": 1})
     text = msgs[1]["content"]
     assert "Админ (создатель): я тут" in text and "Вася: и я" in text and "Участники чата: Админ, Вася." in text
+
+
+def test_clean_reply_strips_harmony_tokens():
+    raw = ("Replying to the last user message:\n<|end|><|start|>assistantreply:\nUser\n<|end|>\nчто")
+    assert clean_reply(raw, "TOR") == "Replying to the last user message:"
+    assert clean_reply("<|channel|>analysis<|message|>думаю<|end|><|start|>assistant<|channel|>final<|message|>иди лесом<|end|>",
+                       "TOR") == "иди лесом"
+    assert clean_reply("<|end|><|start|>assistant", "TOR") is None
+
+
+def test_extract_text_formats():
+    from utils.ai.client import extract_text
+    assert extract_text({"choices": [{"message": {"content": "привет"}}]}) == "привет"
+    assert extract_text({"result": {"response": "привет"}, "success": True}) == "привет"
+    assert extract_text({"result": {"choices": [{"message": {"content": "привет"}}]}}) == "привет"
+    assert extract_text({"choices": [{"message": {"content": None, "reasoning_content": "думаю"}}]}) is None
+    assert extract_text({"output": [{"type": "reasoning"},
+                                    {"type": "message", "content": [{"type": "output_text", "text": "привет"}]}]}) == "привет"
+    assert extract_text("мусор") is None
