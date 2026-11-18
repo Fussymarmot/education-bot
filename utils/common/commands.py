@@ -33,7 +33,10 @@ def _commands(items: list[tuple[str, str]]) -> list[BotCommand]:
 
 async def setup_commands(bot: Bot) -> None:
     """Set up bot commands for different scopes."""
-    await bot.delete_my_commands(BotCommandScopeDefault())
+    try:
+        await bot.delete_my_commands(BotCommandScopeDefault())
+    except TelegramAPIError as exc:
+        log.warning("Failed to clear default commands: %s", exc)
     targets = [(config.group_chat_id, GROUP_COMMANDS)] if config.group_chat_id is not None else []
     targets += [(admin_id, ADMIN_COMMANDS) for admin_id in config.admin_ids]
     for chat_id, items in targets:
