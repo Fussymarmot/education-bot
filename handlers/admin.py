@@ -16,7 +16,7 @@ from keyboards.callbacks import EdCb
 from states.admin import Editor
 from utils import panels
 from utils.schedule.schedule_logic import (
-    parse_bells, parse_day, format_day, UPPER, LOWER, SHIFTS, monday_of
+    parse_bells, parse_day, format_day, count_lessons, UPPER, LOWER, SHIFTS, monday_of
 )
 from utils.common.filters import IsAdmin, IsPrivate
 from utils.common.messaging import edit_panel, try_delete
@@ -182,7 +182,7 @@ async def day_input(message: Message, state: FSMContext) -> None:
         return
     await queries.replace_day(day, [replace(x, day=day) for x in lessons])
     await state.clear()
-    view_text, markup = await panels.day_view(day, f"✅ Сохранено: {len({x.number for x in lessons})} пар.")
+    view_text, markup = await panels.day_view(day, f"✅ Сохранено: {count_lessons(lessons)} пар.")
     await edit_panel(message.bot, chat_id, panel, view_text, markup)
 
 

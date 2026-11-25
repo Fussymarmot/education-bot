@@ -22,14 +22,15 @@ class ScheduleBell(Base):
 
 
 class ScheduleLesson(Base):
-    """Weekly lesson schedule. week: upper|lower|both."""
+    """Weekly lesson schedule. week: upper|lower|both. shift: 0 = default from settings, 1 / 2 = own shift."""
     __tablename__ = "schedule_lessons"
-    __table_args__ = (UniqueConstraint("day", "number", "week", name="uq_schedule_lessons_slot"),)
+    __table_args__ = (UniqueConstraint("day", "shift", "number", "week", name="uq_schedule_lessons_slot"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     day: Mapped[int] = mapped_column(Integer, nullable=False)
     number: Mapped[int] = mapped_column(Integer, nullable=False)
     week: Mapped[str] = mapped_column(String(5), nullable=False)
+    shift: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     subject: Mapped[str] = mapped_column(String(120), nullable=False)
     room: Mapped[str | None] = mapped_column(String(20), nullable=True)
     teacher: Mapped[str | None] = mapped_column(String(60), nullable=True)

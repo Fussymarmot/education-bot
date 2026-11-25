@@ -98,10 +98,10 @@ def test_build_week_resolves_parity_and_hides_empty_weekend():
         L(0, 2, UPPER, "Физика"), L(0, 2, LOWER, "Информатика"),
         L(1, 1, LOWER, "Английский"),
     ]
-    bells = {1: logic.Bell(1, "08:30", "10:00"), 2: logic.Bell(2, "10:10", "11:40")}
+    bells = {1: {1: logic.Bell(1, "08:30", "10:00"), 2: logic.Bell(2, "10:10", "11:40")}}
     monday = date(2026, 10, 12)
 
-    upper = logic.build_week(lessons, UPPER, {0: bells}, monday)
+    upper = logic.build_week(lessons, UPPER, {0: bells}, monday, default_shift=1)
     assert [d.day for d in upper] == [0, 1, 2, 3, 4]                       # no Sat/Sun
     assert upper[0].title == "Понедельник · 12.10"
     assert [(r.number, r.subject, r.time) for r in upper[0].rows] == [
@@ -176,3 +176,77 @@ def test_format_days():
     assert logic.format_days([0, 1, 2, 3, 4]) == "Пн–Пт"
     assert logic.format_days([0, 1, 3, 4, 5]) == "Пн, Вт, Чт–Сб"
     assert logic.format_days([5]) == "Сб"
+
+
+# --------------------------------------------------------------------------- lessons in different shifts
+def test_shift_tag_variants():
+    assert logic.split_shift_tag("[2см] Физика") == (2, "Физика")
+    assert logic.split_shift_tag("[2] Физика") == (2, "Физика")
+    assert logic.split_shift_tag("(1 см) Физика") == (1, "Физика")
+    assert logic.split_shift_tag("[2 смена] Физика") == (2, "Физика")
+    assert logic.split_shift_tag("2см Физика") == (2, "Физика")
+    assert logic.split_shift_tag("2 Физика") == (0, "2 Физика")          # no «см» -> not a tag
+    assert logic.split_shift_tag("[3см] Физика") == (0, "[3см] Физика")  # only shifts 1 and 2
+    assert logic.split_shift_tag("Физика") == (0, "Физика")
+
+
+def test_parse_day_shift_per_lesson():
+    lessons, errors = logic.parse_day(
+        "1 Математика, 301\n"
+        "2 Физика\n"
+        "1 [2см] Информатика, 112\n"
+        "2 [2см] в: Химия / н: -\n"
+        "3 в: [1см] Био / н: [2см] Гео"
+    )
+    assert not errors
+    got = {(x.shift, x.number, x.week, x.subject) for x in lessons}
+    assert (0, 1, BOTH, "Математика") in got and (0, 2, BOTH, "Физика") in got
+    assert (2, 1, BOTH, "Информатика") in got                 # same number, other shift: no clash
+    assert (2, 2, UPPER, "Химия") in got and not any(x.subject == "-" for x in lessons)
+    assert (1, 3, UPPER, "Био") in got and (2, 3, LOWER, "Гео") in got
+
+
+def test_parse_day_shift_clash_only_within_same_shift():
+    assert logic.parse_day("1 [2см] A\n1 [2см] B")[1]
+    assert not logic.parse_day("1 [1см] A\n1 [2см] B")[1]
+
+
+def test_day_roundtrip_with_shifts():
+    text = (
+        "1 Математика, 301\n"
+        "2 Физика\n"
+        "1 [2см] Информатика, 112\n"
+        "2 [2см] в: Химия / н: Гео"
+    )
+    lessons, errors = logic.parse_day(text)
+    assert not errors
+    assert logic.format_day(lessons) == text
+
+
+def test_build_week_mixed_shifts_use_own_bells():
+    def L(number, subject, shift=0):
+        return logic.Lesson(number=number, week=BOTH, subject=subject, day=0, shift=shift)
+
+    bells = {1: {1: logic.Bell(1, "08:30", "10:00"), 2: logic.Bell(2, "10:10", "11:40"), 3: logic.Bell(3, "11:50", "13:20")},
+             2: {1: logic.Bell(1, "13:30", "15:00"), 2: logic.Bell(2, "15:10", "16:40")}}
+    # three lessons in the first shift + one right after them in the second
+    day = logic.build_week([L(1, "A"), L(2, "B"), L(3, "C"), L(1, "D", 2)], UPPER, {0: bells}, default_shift=1)[0]
+    assert [(r.subject, r.time) for r in day.rows] == [
+        ("A", "08:30–10:00"), ("B", "10:10–11:40"), ("C", "11:50–13:20"), ("D", "13:30–15:00")]
+
+    # one lesson in the first shift, the rest in the second (default = 2); order follows the shifts
+    day = logic.build_week([L(1, "A", 1), L(1, "B"), L(2, "C")], UPPER, {0: bells}, default_shift=2)[0]
+    assert [(r.subject, r.time) for r in day.rows] == [
+        ("A", "08:30–10:00"), ("B", "13:30–15:00"), ("C", "15:10–16:40")]
+
+    # two + two; default shift is not set: only lessons with an explicit shift get a time
+    day = logic.build_week([L(1, "A", 1), L(2, "B", 1), L(1, "C", 2), L(2, "D", 2)], UPPER, {0: bells})[0]
+    assert [r.time for r in day.rows] == ["08:30–10:00", "10:10–11:40", "13:30–15:00", "15:10–16:40"]
+    day = logic.build_week([L(1, "A"), L(1, "B", 2)], UPPER, {0: bells})[0]
+    assert [(r.subject, r.time) for r in day.rows] == [("A", ""), ("B", "13:30–15:00")]
+
+
+def test_count_lessons():
+    ls = [logic.Lesson(1, UPPER, "A", day=0), logic.Lesson(1, LOWER, "B", day=0),
+          logic.Lesson(1, BOTH, "C", day=0, shift=2), logic.Lesson(1, BOTH, "D", day=1)]
+    assert logic.count_lessons(ls) == 3

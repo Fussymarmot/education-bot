@@ -27,6 +27,20 @@ MAX_NOTE = 60
 
 _EMPTY_ITEMS = {"-", "—", "–", "нет", "окно"}
 
+# Shift tag at the start of a lesson: «[2]», «[2см]», «(2 см)», «[2 смена]» or «2см».
+_SHIFT_TAG_RE = re.compile(
+    r"^\s*(?:[\[(]\s*([12])\s*(?:см\w*\.?)?\s*[\])]|([12])\s*см\w*\.?(?=\s|$))\s*",
+    re.IGNORECASE,
+)
+
+
+def split_shift_tag(text: str) -> tuple[int, str]:
+    """`[2см] Физика` -> (2, "Физика"); no tag -> (0, text)."""
+    match = _SHIFT_TAG_RE.match(text)
+    if not match:
+        return 0, text
+    return int(match.group(1) or match.group(2)), text[match.end():]
+
 
 @dataclass(frozen=True)
 class Bell:
@@ -45,6 +59,7 @@ class Lesson:
     room: str = ""
     teacher: str = ""
     day: int = -1       # 0=Mon; -1 until the caller assigns it
+    shift: int = 0      # 0 = use the default shift from the settings; 1 / 2 = this lesson's own shift
 
 
 @dataclass(frozen=True)
@@ -204,10 +219,15 @@ def parse_day(text: str) -> tuple[list[Lesson], list[str]]:
     `2 в: Физика, 205 / н: Информатика, 112`    — different on upper / lower week
     `3 н: Английский`                           — lower week only (upper week: no lesson)
     `4 в: Химия / н: -`                         — «-», «—», «нет», «окно» = no lesson that week
+    `5 [2см] Физика, 205`                       — this lesson is in the 2nd shift (the others keep the default)
+    `5 [2см] в: Физика / н: -`                  — the tag may also stand for the whole line, or for one week only
+
+    Lesson numbers are numbers of the bells *of the lesson's shift*, so `1 Математика` and
+    `1 [2см] Физика` may both exist in one day.
     """
     lessons: list[Lesson] = []
     errors: list[str] = []
-    taken: dict[int, set[str]] = defaultdict(set)
+    taken: dict[tuple[int, int], set[str]] = defaultdict(set)   # (shift, number) -> weeks
 
     for index, raw in enumerate((text or "").splitlines(), 1):
         if not raw.strip():
@@ -221,6 +241,7 @@ def parse_day(text: str) -> tuple[list[Lesson], list[str]]:
             errors.append(f"Строка {index}: номер пары должен быть от 1 до {MAX_NUMBER}.")
             continue
 
+        line_shift, rest = split_shift_tag(rest)
         marks = list(_MARK_RE.finditer(rest))
         variants: list[tuple[str, str]] = []
         if not marks:
@@ -243,6 +264,8 @@ def parse_day(text: str) -> tuple[list[Lesson], list[str]]:
         failed = False
         for week, item in variants:
             item = item.strip().rstrip("/|;").strip()
+            item_shift, item = split_shift_tag(item)
+            item = item.strip()
             if not item:
                 errors.append(f"Строка {index}: после метки пусто (для «нет пары» поставьте «-»).")
                 failed = True
@@ -255,23 +278,24 @@ def parse_day(text: str) -> tuple[list[Lesson], list[str]]:
                 errors.append(f"Строка {index}: {exc}.")
                 failed = True
                 break
-            parsed.append(Lesson(number=number, week=week, subject=subject, room=room, teacher=teacher))
+            parsed.append(Lesson(number=number, week=week, subject=subject, room=room, teacher=teacher,
+                                 shift=item_shift or line_shift))
         if failed:
             continue
 
         clash = any(
-            lesson.week in taken[number] or BOTH in taken[number]
-            or (lesson.week == BOTH and taken[number])
+            lesson.week in taken[(lesson.shift, number)] or BOTH in taken[(lesson.shift, number)]
+            or (lesson.week == BOTH and taken[(lesson.shift, number)])
             for lesson in parsed
         )
         if clash:
             errors.append(f"Строка {index}: пара №{number} уже задана выше для этой недели.")
             continue
         for lesson in parsed:
-            taken[number].add(lesson.week)
+            taken[(lesson.shift, number)].add(lesson.week)
         lessons.extend(parsed)
 
-    return sorted(lessons, key=lambda x: (x.number, x.week)), errors
+    return sorted(lessons, key=lambda x: (x.shift, x.number, x.week)), errors
 
 
 def _format_item(lesson: Lesson) -> str:
@@ -285,50 +309,65 @@ def _format_item(lesson: Lesson) -> str:
 
 def format_day(lessons: list[Lesson]) -> str:
     """Inverse of parse_day (shown to the admin so a day can be copied and edited)."""
-    by_number: dict[int, dict[str, Lesson]] = defaultdict(dict)
+    by_slot: dict[tuple[int, int], dict[str, Lesson]] = defaultdict(dict)
     for lesson in lessons:
-        by_number[lesson.number][lesson.week] = lesson
+        by_slot[(lesson.shift, lesson.number)][lesson.week] = lesson
     lines = []
-    for number in sorted(by_number):
-        variants = by_number[number]
+    for shift, number in sorted(by_slot):
+        variants = by_slot[(shift, number)]
+        tag = f"[{shift}см] " if shift else ""      # all variants of a slot share the shift
         if BOTH in variants:
-            lines.append(f"{number} {_format_item(variants[BOTH])}")
+            lines.append(f"{number} {tag}{_format_item(variants[BOTH])}")
             continue
         parts = []
         if UPPER in variants:
             parts.append(f"в: {_format_item(variants[UPPER])}")
         if LOWER in variants:
             parts.append(f"н: {_format_item(variants[LOWER])}")
-        lines.append(f"{number} " + " / ".join(parts))
+        lines.append(f"{number} {tag}" + " / ".join(parts))
     return "\n".join(lines)
+
+
+def lesson_shift(lesson: Lesson, default_shift: int = 0) -> int:
+    """Shift of a lesson: its own one, else the default from the settings (0 = unknown / not shown)."""
+    return lesson.shift or default_shift
+
+
+def count_lessons(lessons: list[Lesson]) -> int:
+    """Number of distinct lesson slots (a lesson that differs by week is still one slot)."""
+    return len({(x.day, x.shift, x.number) for x in lessons})
 
 
 def build_week(
     lessons: list[Lesson],
     parity: str,
-    bells_by_day: dict[int, dict[int, Bell]] | None = None,
+    bells_by_day: dict[int, dict[int, dict[int, Bell]]] | None = None,
     monday: date | None = None,
+    default_shift: int = 0,
 ) -> list[DayView]:
     """Resolve the schedule of one concrete week (upper or lower) into per-day tables.
 
     Monday–Friday are always listed; Saturday/Sunday only when something is scheduled on them.
+    `bells_by_day` is {weekday: {shift: {number: Bell}}}. Every lesson takes its time from the bells of
+    its own shift (`Lesson.shift`, else `default_shift`), so one day may mix lessons of both shifts.
+    Rows go in the order of the day: first-shift lessons, then second-shift ones.
     """
     busy_days = {lesson.day for lesson in lessons}
     result: list[DayView] = []
     for day in range(7):
         if day > 4 and day not in busy_days:
             continue
-        bells = (bells_by_day or {}).get(day, {})
-        rows = [
-            LessonRow(
+        day_bells = (bells_by_day or {}).get(day, {})
+        todays = [x for x in lessons if x.day == day and x.week in (BOTH, parity)]
+        todays.sort(key=lambda x: (lesson_shift(x, default_shift) or 1, x.number))
+        rows = []
+        for lesson in todays:
+            bell = day_bells.get(lesson_shift(lesson, default_shift), {}).get(lesson.number)
+            rows.append(LessonRow(
                 number=lesson.number,
-                time=(f"{bells[lesson.number].start}–{bells[lesson.number].end}"
-                      if lesson.number in bells else ""),
+                time=f"{bell.start}–{bell.end}" if bell else "",
                 subject=lesson.subject, room=lesson.room, teacher=lesson.teacher,
-            )
-            for lesson in sorted(lessons, key=lambda x: x.number)
-            if lesson.day == day and lesson.week in (BOTH, parity)
-        ]
+            ))
         title = DAY_FULL[day]
         if monday is not None:
             title += f" · {(monday + timedelta(days=day)):%d.%m}"

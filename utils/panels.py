@@ -12,7 +12,7 @@ from keyboards import admin as kb
 from utils.replacements.replacements_logic import clean_group, MAX_GROUP_FILTER
 from utils.schedule.schedule_logic import (
     DAY_FULL, DEFAULT_DAY, SHIFTS, format_bells, format_day,
-    week_parity, WEEK_LABEL, format_week_range, monday_of
+    week_parity, WEEK_LABEL, format_week_range, monday_of, count_lessons
 )
 
 Panel = tuple[str, InlineKeyboardMarkup]
@@ -54,13 +54,13 @@ async def menu_view(notice: str = "") -> Panel:
     today = datetime.now(config.tz).date()
     parity = week_parity(today, settings.anchor_monday, settings.anchor_parity)
     week = f"сейчас {WEEK_LABEL[parity]}" if parity else "не указана"
-    shift = f"{settings.lessons_shift} смена" if settings.lessons_shift else "не показывается"
+    shift = f"по умолчанию {settings.lessons_shift} смена" if settings.lessons_shift else "по умолчанию не показывается"
     repl_group = await queries.get_replacements_group()
     text = (
         f"<tg-emoji emoji-id='{config.icons['panel']}'>🧰</tg-emoji> <b>Редактор расписания</b>\n\n"
         f"<tg-emoji emoji-id='{config.icons['bells']}'>🔔</tg-emoji> Звонки (обычные дни): смена 1 — {len(common.get(1, {}))} зв., смена 2 — {len(common.get(2, {}))} зв."
         + (f", свои расписания: {overrides}" if overrides else "") + "\n"
-        f"<tg-emoji emoji-id='{config.icons['lessons']}'>📚</tg-emoji> Занятия: {len({(x.day, x.number) for x in lessons})} пар в неделю\n"
+        f"<tg-emoji emoji-id='{config.icons['lessons']}'>📚</tg-emoji> Занятия: {count_lessons(lessons)} пар в неделю\n"
         f"<tg-emoji emoji-id='{config.icons['calendar']}'>📆</tg-emoji> Неделя: {week}\n"
         f"<tg-emoji emoji-id='{config.icons['time']}'>⏳</tg-emoji> Время пар: {shift}\n"
         f"<tg-emoji emoji-id='{config.icons['replacements']}'>🔄</tg-emoji> Замены в группе: {escape(repl_group) if repl_group else 'выключены'}"
@@ -125,7 +125,7 @@ def bells_clear_confirm_view(day: int, shift: int) -> Panel:
 
 async def days_view(notice: str = "") -> Panel:
     lessons = await queries.load_lessons()
-    counts = {d: len({x.number for x in lessons if x.day == d}) for d in range(7)}
+    counts = {d: count_lessons([x for x in lessons if x.day == d]) for d in range(7)}
     text = f"<tg-emoji emoji-id='{config.icons['lessons']}'>📚</tg-emoji> <b>Расписание занятий</b>\n\nВыберите день недели. В скобках — сколько пар в этот день."
     return with_notice(text, notice), kb.days_kb(counts)
 
@@ -147,7 +147,14 @@ def day_prompt(day: int, current: str, notice: str = "") -> Panel:
         "2 в: Физика, 205 / н: Информатика, 112\n"
         "3 н: Английский\n"
         "4 в: Химия / н: -</pre>"
-        "«-» — в эту неделю пары нет. Старое расписание дня будет заменено."
+        "«-» — в эту неделю пары нет.\n\n"
+        "Если пара идёт в другую смену, добавьте перед предметом <code>[1см]</code> или <code>[2см]</code>. "
+        "Номер — это номер звонка в этой смене. Пары без метки берут смену по умолчанию (⚙️ «Верх/низ и смена»):\n"
+        "<pre>1 Математика, 301\n"
+        "2 Физика, 205\n"
+        "1 [2см] Информатика, 112\n"
+        "2 [2см] в: Химия / н: -</pre>"
+        "Старое расписание дня будет заменено."
     )
     if current:
         text += f"\n\nСейчас (можно скопировать и поправить):\n<pre>{escape(current)}</pre>"
@@ -173,7 +180,8 @@ async def settings_view(notice: str = "") -> Panel:
     text = (
         f"<tg-emoji emoji-id='{config.icons['settings']}'>⚙️</tg-emoji> <b>Верх/низ и смена</b>\n\n"
         f"<tg-emoji emoji-id='{config.icons['calendar']}'>📆</tg-emoji> {week}\n\n"
-        f"<tg-emoji emoji-id='{config.icons['time']}'>⏳</tg-emoji> Время пар в расписании занятий: {shift}. Берётся из расписания звонков выбранной смены."
+        f"<tg-emoji emoji-id='{config.icons['time']}'>⏳</tg-emoji> Смена по умолчанию: {shift}. Время пар берётся из расписания звонков этой смены. "
+        "Если у пары в расписании дня стоит своя метка <code>[1см]</code> / <code>[2см]</code>, используется она."
     )
     return with_notice(text, notice), kb.settings_kb(settings.lessons_shift)
 

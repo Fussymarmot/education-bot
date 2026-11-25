@@ -20,7 +20,7 @@ from utils.schedule import schedule_logic as lg
 class Settings:
     anchor_monday: date | None = None
     anchor_parity: str | None = None
-    lessons_shift: int = 0          # 0 = do not show lesson times
+    lessons_shift: int = 0          # default shift of lessons without their own; 0 = no times for them
 
 
 async def load_settings() -> Settings:
@@ -63,14 +63,15 @@ async def load_bells() -> dict[int, dict[int, dict[int, lg.Bell]]]:
 
 
 async def load_lessons(day: int | None = None) -> list[lg.Lesson]:
-    statement = select(ScheduleLesson).order_by(ScheduleLesson.day, ScheduleLesson.number, ScheduleLesson.week)
+    statement = select(ScheduleLesson).order_by(
+        ScheduleLesson.day, ScheduleLesson.shift, ScheduleLesson.number, ScheduleLesson.week)
     if day is not None:
         statement = statement.where(ScheduleLesson.day == day)
     async with read_session() as s:
         rows = (await s.scalars(statement)).all()
     return [
         lg.Lesson(number=r.number, week=r.week, subject=r.subject, room=r.room or "",
-                  teacher=r.teacher or "", day=r.day)
+                  teacher=r.teacher or "", day=r.day, shift=r.shift or 0)
         for r in rows
     ]
 
@@ -89,7 +90,7 @@ async def replace_day(day: int, lessons: list[lg.Lesson]) -> None:
     async with session() as s:
         await s.execute(delete(ScheduleLesson).where(ScheduleLesson.day == day))
         s.add_all(
-            ScheduleLesson(day=day, number=x.number, week=x.week, subject=x.subject,
+            ScheduleLesson(day=day, number=x.number, week=x.week, shift=x.shift, subject=x.subject,
                            room=x.room or None, teacher=x.teacher or None)
             for x in lessons
         )
