@@ -118,9 +118,18 @@ def week_view(days: list[DayView], *, subtitle: str, note: str = "", show_time: 
                 blocks.append(InputRichBlockParagraph(text="Занятий нет"))
             continue
 
+        # One table per day; shift labels are section rows inside that table.
         text_rows: list[list[str]] = []
         rich_rows: list[list[Any]] = []
+        previous_shift: int | None = None
         for row in day.rows:
+            if row.shift != previous_shift:
+                shift_title = f"{row.shift} смена" if row.shift in (1, 2) else "Смена не указана"
+                text_rows.append([shift_title] + [""] * (len(header) - 1))
+                if RICH_AVAILABLE:
+                    rich_rows.append([_cell(shift_title, header=True)] + [_cell("") for _ in range(len(header) - 1)])
+                previous_shift = row.shift
+
             subject_text = row.subject + (f" — {row.teacher}" if row.teacher else "")
             text_row = [str(row.number)] + ([row.time or "—"] if show_time else []) + [subject_text]
             rich_subject: Any = (
@@ -132,10 +141,13 @@ def week_view(days: list[DayView], *, subtitle: str, note: str = "", show_time: 
                 text_row.append(row.room or "")
                 rich_row.append(row.room or "")
             text_rows.append(text_row)
-            rich_rows.append(rich_row)
+            if RICH_AVAILABLE:
+                rich_rows.append([_cell(value, align=aligns[i]) for i, value in enumerate(rich_row)])
         html_parts.append(f"\n<b>{escape(day.title)}</b>\n<pre>{text_table(header, text_rows)}</pre>")
         if RICH_AVAILABLE:
-            blocks.append(_table(header, rich_rows, aligns))
+            # _table normally creates its own header; keep the shift sections in the same table.
+            cells = [[_cell(h, header=True, align="center") for h in header]] + rich_rows
+            blocks.append(InputRichBlockTable(cells=cells, is_bordered=True, is_compact=True))
 
     rich = InputRichMessage(blocks=blocks) if RICH_AVAILABLE else None
     return View(rich=rich, html="\n".join(html_parts))

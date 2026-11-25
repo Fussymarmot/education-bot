@@ -69,6 +69,7 @@ class LessonRow:
     subject: str
     room: str
     teacher: str
+    shift: int = 0
 
 
 @dataclass(frozen=True)
@@ -367,6 +368,7 @@ def build_week(
                 number=lesson.number,
                 time=f"{bell.start}–{bell.end}" if bell else "",
                 subject=lesson.subject, room=lesson.room, teacher=lesson.teacher,
+                shift=lesson_shift(lesson, default_shift),
             ))
         title = DAY_FULL[day]
         if monday is not None:
