@@ -1,5 +1,5 @@
 from utils.schedule import schedule_logic as logic
-from utils import schedule_render as render
+from utils.schedule import schedule_render as render
 
 
 def test_bells_view_has_table_and_html_fallback():
@@ -33,3 +33,33 @@ def test_bells_view_one_table_per_day_group():
     assert "Пн–Пт" in view.html and "<b>Сб</b>" in view.html and view.html.count("<pre>") == 2
     if render.RICH_AVAILABLE:
         assert [b.type for b in view.rich.blocks] == ["heading", "heading", "table", "heading", "table"]
+
+
+def test_week_view_hides_shift_headings_when_day_has_only_one_shift():
+    lessons = [
+        logic.Lesson(1, logic.BOTH, "Математика", day=0, shift=1),
+        logic.Lesson(2, logic.BOTH, "Физика", day=0, shift=1),
+    ]
+    days = logic.build_week(lessons, logic.UPPER)
+    view = render.week_view(days, subtitle="Верхняя неделя")
+    assert "1 смена" not in view.html
+    assert "2 смена" not in view.html
+    assert "Математика" in view.html and "Физика" in view.html
+    if render.RICH_AVAILABLE:
+        table = next(block for block in view.rich.blocks if block.type == "table")
+        # Header + two lesson rows; no extra shift-section row.
+        assert len(table.cells) == 3
+
+
+def test_week_view_shows_both_shift_headings_when_day_has_both_shifts():
+    lessons = [
+        logic.Lesson(1, logic.BOTH, "Математика", day=0, shift=1),
+        logic.Lesson(1, logic.BOTH, "История", day=0, shift=2),
+    ]
+    days = logic.build_week(lessons, logic.UPPER)
+    view = render.week_view(days, subtitle="Верхняя неделя")
+    assert "1 смена" in view.html and "2 смена" in view.html
+    if render.RICH_AVAILABLE:
+        table = next(block for block in view.rich.blocks if block.type == "table")
+        # Header + two shift headings + two lesson rows.
+        assert len(table.cells) == 5

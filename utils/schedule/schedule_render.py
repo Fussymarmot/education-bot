@@ -118,13 +118,15 @@ def week_view(days: list[DayView], *, subtitle: str, note: str = "", show_time: 
                 blocks.append(InputRichBlockParagraph(text="Занятий нет"))
             continue
 
-        # One table per day; shift labels are section rows inside that table.
+        # Add shift section rows only when this day actually contains both shifts.
+        # A day with lessons from just one shift stays a plain table without a redundant heading.
+        has_both_shifts = {row.shift for row in day.rows} >= {1, 2}
         text_rows: list[list[str]] = []
         rich_rows: list[list[Any]] = []
         previous_shift: int | None = None
         for row in day.rows:
-            if row.shift != previous_shift:
-                shift_title = f"{row.shift} смена" if row.shift in (1, 2) else "Смена не указана"
+            if has_both_shifts and row.shift != previous_shift:
+                shift_title = f"{row.shift} смена"
                 text_rows.append([shift_title] + [""] * (len(header) - 1))
                 if RICH_AVAILABLE:
                     rich_rows.append([_cell(shift_title, header=True)] + [_cell("") for _ in range(len(header) - 1)])
